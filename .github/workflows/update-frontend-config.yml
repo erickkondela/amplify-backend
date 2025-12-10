@@ -1,0 +1,101 @@
+name: Update Frontend Config
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  update-config:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout backend repo
+        uses: actions/checkout@v4
+        with:
+          path: backend
+
+      - name: Checkout frontend repo
+        uses: actions/checkout@v4
+        with:
+          repository: erickkondela/newtodo  # TODO: Update with your GitHub username
+          token: ${{ secrets.FRONTEND_REPO_TOKEN }}
+          path: frontend
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-north-1
+
+      - name: Generate production config
+        working-directory: backend
+        run: |
+          echo "🔄 Generating Amplify outputs for production..."
+          npx ampx generate outputs \
+            --app-id ${{ secrets.AMPLIFY_APP_ID }} \
+            --branch main \
+            --format dart \
+            --out-dir ../frontend/lib/config
+          
+          echo "✅ Config generated successfully"
+
+      - name: Rename to production config
+        working-directory: frontend
+        run: |
+          if [ -f "lib/config/amplify_outputs.dart" ]; then
+            mv lib/config/amplify_outputs.dart lib/config/amplify_outputs_prod.dart
+            echo "✅ Renamed to amplify_outputs_prod.dart"
+          else
+            echo "❌ Error: amplify_outputs.dart not found"
+            exit 1
+          fi
+
+      - name: Check for changes
+        id: check_changes
+        working-directory: frontend
+        run: |
+          git add lib/config/amplify_outputs_prod.dart
+          if git diff --staged --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No changes to commit"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "✅ Changes detected"
+          fi
+
+      - name: Commit and push changes
+        if: steps.check_changes.outputs.changed == 'true'
+        working-directory: frontend
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git commit -m "chore: update production Amplify config [skip ci]"
+          git push
+          echo "✅ Changes pushed to frontend repo"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 🎉 Frontend Config Update Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend Branch:** main" >> $GITHUB_STEP_SUMMARY
+          echo "- **Frontend Config:** amplify_outputs_prod.dart" >> $GITHUB_STEP_SUMMARY
+          echo "- **Changes Committed:** ${{ steps.check_changes.outputs.changed }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Frontend developers can now pull the latest changes and run:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "git pull" >> $GITHUB_STEP_SUMMARY
+          echo "flutter run --dart-define=ENVIRONMENT=prod" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
