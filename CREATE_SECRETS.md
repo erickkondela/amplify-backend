@@ -22,7 +22,7 @@ Click **"New repository secret"** for each:
 ### Secret 1: FRONTEND_REPO_TOKEN
 ```
 Name: FRONTEND_REPO_TOKEN
-Value: ghp_xxxxxxxxxxxxxxxxxxxx  (paste the token from Step 1)
+Value: [Your GitHub Token]
 ```
 
 ### Secret 2: AMPLIFY_APP_ID
